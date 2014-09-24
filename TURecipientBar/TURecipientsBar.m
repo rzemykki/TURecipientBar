@@ -16,7 +16,7 @@
 
 void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 
-//
+
 @implementation TURecipientsBar
 {
 	UILabel *_toLabel;
