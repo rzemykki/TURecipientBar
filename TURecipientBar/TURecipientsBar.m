@@ -23,7 +23,8 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 	UIButton *_addButton;
 	UILabel *_placeholderLabel;
     UIView *_summaryContainerView;
-
+    CAGradientLayer *_summaryGradientMaskLayer;
+    
 	UIView *_lineView;
 	NSArray *_updatingConstraints; // NSLayoutConstraint
     NSArray *_addButtonHiddenConstraints; // NSLayoutConstraint
@@ -176,6 +177,21 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 }
 
 
+- (void)_setSummaryContainerViewMaskHidden:(BOOL)hidden
+{
+    if (hidden == NO && _summaryGradientMaskLayer == nil)
+    {
+        _summaryGradientMaskLayer = [CAGradientLayer layer];
+        _summaryGradientMaskLayer.colors = @[(id)[UIColor clearColor].CGColor, (id)[UIColor whiteColor].CGColor];
+        _summaryGradientMaskLayer.frame = _summaryContainerView.bounds;
+        _summaryGradientMaskLayer.startPoint = CGPointMake(0.0, 0.5);
+        _summaryGradientMaskLayer.endPoint = CGPointMake(0.1, 0.5);
+    }
+    
+    _summaryContainerView.layer.mask = (hidden ? nil : _summaryGradientMaskLayer);
+}
+
+
 - (void)_updateSummaryWithRecipient:(id<TURecipient>)recipient
 {
     UILabel *lastRecipient = _summaryContainerView.subviews.lastObject;
@@ -196,6 +212,8 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
     if (lastRecipient != nil && notEnoughSpaceToLayoutAllRecipientsOnOneRow)
     {
         [self _layoutSummaryRecipientsRightAligned];
+        
+        [self _setSummaryContainerViewMaskHidden:NO];
     }
     else
     {
@@ -203,15 +221,17 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
         rect.origin.x = leftPadding + (lastRecipient ? CGRectGetMaxX(lastRecipient.frame) : 0.0);
         rect.origin.y = 0.0;
         newRecipientLabel.frame = rect;
+        
+        [self _setSummaryContainerViewMaskHidden:YES];
     }
     
     // TODO: do not animate if the summary is not visible
     newRecipientLabel.alpha = 0.0;
-    newRecipientLabel.transform = CGAffineTransformMakeScale(0.1, 0.1);
+    newRecipientLabel.transform = CGAffineTransformMakeScale(0.2, 0.2);
     
-    [UIView animateWithDuration:0.5
+    [UIView animateWithDuration:0.4
                           delay:0.0
-         usingSpringWithDamping:0.5
+         usingSpringWithDamping:0.8
           initialSpringVelocity:0.4
                         options:UIViewAnimationOptionCurveEaseInOut
                      animations:^() {
@@ -299,6 +319,8 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
                 
                 previousRecipientLabel = currentRecipientLabel;
             }
+            
+            [self _setSummaryContainerViewMaskHidden:YES];
         }
         else
         {
@@ -320,14 +342,16 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
                 
                 previousRecipientLabel = currentRecipientLabel;
             }
+            
+            [self _setSummaryContainerViewMaskHidden:NO];
         }
         
         [removedSummaryLabel removeFromSuperview];
     };
     
-    [UIView animateWithDuration:0.5
+    [UIView animateWithDuration:0.4
                           delay:0.0
-         usingSpringWithDamping:0.5
+         usingSpringWithDamping:1.0
           initialSpringVelocity:0.4
                         options:UIViewAnimationOptionCurveEaseInOut
                      animations:animation
