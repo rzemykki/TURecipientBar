@@ -21,7 +21,10 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 {
 	UILabel *_toLabel;
 	UIButton *_addButton;
-	UILabel *_summaryLabel;
+	UILabel *_placeholderLabel;
+    UIView *_summaryContainerView;
+    CAGradientLayer *_summaryGradientMaskLayer;
+    
 	UIView *_lineView;
 	NSArray *_updatingConstraints; // NSLayoutConstraint
     NSArray *_addButtonHiddenConstraints; // NSLayoutConstraint
@@ -124,12 +127,126 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
         recipientView.alpha = 0.0;
     }
 	
-	[self _updateSummary];
+    _placeholderLabel.hidden = YES;
+    
+    [self _updateSummaryWithRecipient:recipient];
 }
+
+
+- (void)_configureSummaryRecipientLabel:(UILabel *)label forRecipient:(id<TURecipient>)recipient
+{
+    CGFloat labelWidth;
+    CGSize availableSpace = CGSizeMake(CGFLOAT_MAX, [self _summaryContainerViewFrame].size.height);
+    
+    NSString *compoundRecipientTitle = nil;
+    
+    if ([_recipients indexOfObject:recipient] > 0)
+    {
+        compoundRecipientTitle = [NSString stringWithFormat:@", %@", recipient.recipientTitle];
+    }
+    else
+    {
+        compoundRecipientTitle = recipient.recipientTitle;
+    }
+    
+    if (self.summaryTextAttributes)
+    {
+        label.attributedText = [[NSAttributedString alloc] initWithString:compoundRecipientTitle
+                                                               attributes:self.summaryTextAttributes];
+        
+        labelWidth = [label.attributedText boundingRectWithSize:availableSpace
+                                                        options:NSStringDrawingUsesLineFragmentOrigin
+                                                        context:nil].size.width;
+    }
+    else
+    {
+        label.text = compoundRecipientTitle;
+        
+        NSDictionary *attributes = @{NSFontAttributeName : [UIFont systemFontOfSize:15.0]};
+        
+        labelWidth = [label.text boundingRectWithSize:availableSpace
+                                              options:NSStringDrawingUsesLineFragmentOrigin
+                                           attributes:attributes
+                                              context:nil].size.width;
+    }
+    
+    CGRect labelRect = label.frame;
+    labelRect.size.width = labelWidth;
+    labelRect.size.height = _summaryContainerView.bounds.size.height;
+    label.frame = labelRect;
+}
+
+
+- (void)_setSummaryContainerViewMaskHidden:(BOOL)hidden
+{
+    if (hidden == NO && _summaryGradientMaskLayer == nil)
+    {
+        _summaryGradientMaskLayer = [CAGradientLayer layer];
+        _summaryGradientMaskLayer.colors = @[(id)[UIColor clearColor].CGColor, (id)[UIColor whiteColor].CGColor];
+        _summaryGradientMaskLayer.frame = _summaryContainerView.bounds;
+        _summaryGradientMaskLayer.startPoint = CGPointMake(0.0, 0.5);
+        _summaryGradientMaskLayer.endPoint = CGPointMake(0.1, 0.5);
+    }
+    
+    _summaryContainerView.layer.mask = (hidden ? nil : _summaryGradientMaskLayer);
+}
+
+
+- (void)_updateSummaryWithRecipient:(id<TURecipient>)recipient
+{
+    UILabel *lastRecipient = _summaryContainerView.subviews.lastObject;
+    
+    UILabel *newRecipientLabel = [[UILabel alloc] init];
+    [_summaryContainerView addSubview:newRecipientLabel];
+    
+    [self _configureSummaryRecipientLabel:newRecipientLabel forRecipient:recipient];
+    
+    CGFloat leftPadding = 1.0;
+    CGFloat summaryWidth = _summaryContainerView.bounds.size.width;
+    CGFloat horizontalSpaceLeft = (lastRecipient == nil ? summaryWidth
+                                                        : summaryWidth - CGRectGetMaxX(lastRecipient.frame));
+    
+    BOOL notEnoughSpaceToLayoutAllRecipientsOnOneRow =
+        (horizontalSpaceLeft - (leftPadding + newRecipientLabel.bounds.size.width) <= 0.0);
+    
+    if (lastRecipient != nil && notEnoughSpaceToLayoutAllRecipientsOnOneRow)
+    {
+        [self _layoutSummaryRecipientsRightAligned];
+        
+        [self _setSummaryContainerViewMaskHidden:NO];
+    }
+    else
+    {
+        CGRect rect = newRecipientLabel.frame;
+        rect.origin.x = leftPadding + (lastRecipient ? CGRectGetMaxX(lastRecipient.frame) : 0.0);
+        rect.origin.y = 0.0;
+        newRecipientLabel.frame = rect;
+        
+        [self _setSummaryContainerViewMaskHidden:YES];
+    }
+    
+    // TODO: do not animate if the summary is not visible
+    newRecipientLabel.alpha = 0.0;
+    newRecipientLabel.transform = CGAffineTransformMakeScale(0.2, 0.2);
+    
+    [UIView animateWithDuration:0.4
+                          delay:0.0
+         usingSpringWithDamping:0.8
+          initialSpringVelocity:0.4
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:^() {
+                         newRecipientLabel.alpha = 1.0;
+                         newRecipientLabel.transform = CGAffineTransformIdentity;
+                     } completion:^(BOOL finished) {
+                         
+                     }];
+}
+
 
 - (void)removeRecipient:(id<TURecipient>)recipient
 {
-	NSIndexSet *changedIndex = [NSIndexSet indexSetWithIndex:[_recipients indexOfObject:recipient]];
+    NSUInteger recipientIndex = [_recipients indexOfObject:recipient];
+	NSIndexSet *changedIndex = [NSIndexSet indexSetWithIndex:recipientIndex];
 	
 	[self willChange:NSKeyValueChangeRemoval valuesAtIndexes:changedIndex forKey:@"recipients"];
 	[_recipients removeObjectsAtIndexes:changedIndex];
@@ -160,8 +277,92 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
         [recipientView removeFromSuperview];
     }
 	
-	
-	[self _updateSummary];
+    UILabel *firstSummaryLabel = _summaryContainerView.subviews.firstObject;
+    UILabel *lastSummaryLabel = _summaryContainerView.subviews.lastObject;
+    UILabel *removedSummaryLabel = _summaryContainerView.subviews[recipientIndex];
+    
+    if ([_summaryContainerView.subviews indexOfObject:removedSummaryLabel] == 0 &&
+        [_summaryContainerView.subviews count] > 1)
+    {
+        UILabel *summaryLabelAfterTheRemovedOne = _summaryContainerView.subviews[1];
+        
+        [self _configureSummaryRecipientLabel:summaryLabelAfterTheRemovedOne forRecipient:_recipients[0]];
+    }
+    
+    // TODO: do not animate if the summary is not visible
+    void (^animation)() = ^()
+    {
+        removedSummaryLabel.alpha = 0.0;
+        removedSummaryLabel.transform = CGAffineTransformMakeScale(0.1, 0.1);
+        
+        CGFloat leftPadding = 1.0;
+        CGFloat minX = firstSummaryLabel.frame.origin.x;
+        CGFloat maxX = CGRectGetMaxX(lastSummaryLabel.frame);
+        CGFloat usedHorizontalSpace = fabs(minX) + maxX;
+        
+        if (usedHorizontalSpace - removedSummaryLabel.bounds.size.width - leftPadding <= _summaryContainerView.bounds.size.width)
+        {
+            UILabel *previousRecipientLabel = nil;
+            
+            for (NSInteger index = 0; index < [_summaryContainerView.subviews count]; index++)
+            {
+                if (index == recipientIndex)
+                {
+                    continue;
+                }
+                
+                UILabel *currentRecipientLabel = _summaryContainerView.subviews[index];
+                
+                CGRect rect = currentRecipientLabel.frame;
+                rect.origin.x = (previousRecipientLabel ? CGRectGetMaxX(previousRecipientLabel.frame) : 0.0) + leftPadding;
+                currentRecipientLabel.frame = rect;
+                
+                previousRecipientLabel = currentRecipientLabel;
+            }
+            
+            [self _setSummaryContainerViewMaskHidden:YES];
+        }
+        else
+        {
+            UILabel *previousRecipientLabel = nil;
+            
+            for (NSInteger index = [_summaryContainerView.subviews count] - 1; index >= 0; index--)
+            {
+                if (index == recipientIndex)
+                {
+                    continue;
+                }
+                
+                UILabel *currentRecipientLabel = _summaryContainerView.subviews[index];
+                
+                CGRect rect = currentRecipientLabel.frame;
+                rect.origin.x = (previousRecipientLabel ? previousRecipientLabel.frame.origin.x - leftPadding - rect.size.width
+                                                        : _summaryContainerView.bounds.size.width - rect.size.width);
+                currentRecipientLabel.frame = rect;
+                
+                previousRecipientLabel = currentRecipientLabel;
+            }
+            
+            [self _setSummaryContainerViewMaskHidden:NO];
+        }
+        
+        [removedSummaryLabel removeFromSuperview];
+    };
+    
+    [UIView animateWithDuration:0.4
+                          delay:0.0
+         usingSpringWithDamping:1.0
+          initialSpringVelocity:0.4
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:animation
+                     completion:^(BOOL finished) {
+                         [removedSummaryLabel removeFromSuperview];
+                         
+                         if ([_recipients count] == 0)
+                         {
+                             _placeholderLabel.hidden = NO;
+                         }
+                     }];
 }
 
 - (void)setAutocapitalizationType:(UITextAutocapitalizationType)autocapitalizationType
@@ -315,147 +516,21 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 - (void)_updateSummary
 {
     if (_recipients.count > 0) {
-        NSMutableString *summary = [[NSMutableString alloc] init];
+        _placeholderLabel.hidden = YES;
         
-        for (id<TURecipient>recipient in _recipients) {
-            [summary appendString:recipient.recipientTitle];
-            
-            if (recipient != [_recipients lastObject]) {
-                [summary appendString:@", "];
-            }
-        }
-        
-        _summaryLabel.textColor = [UIColor darkTextColor];
-        if (self.summaryTextAttributes == nil) {
-            if (self.showsSummaryInReversedOrder) {
-                _summaryLabel.text = [self reversedSummaryTextFromString:summary];
-            }
-            else {
-                _summaryLabel.text = summary;
-            }
-        } else {
-            if (self.showsSummaryInReversedOrder) {
-                _summaryLabel.attributedText = [self reversedAttributedSummaryTextFromString:summary];
-            }
-            else {
-                _summaryLabel.attributedText =
-                    [[NSAttributedString alloc] initWithString:summary
-                                                    attributes:self.summaryTextAttributes];
-            }
-        }
+        // TODO: should recreate all the summary
     } else {
-        _summaryLabel.textColor = [UIColor lightGrayColor];
+        _placeholderLabel.hidden = NO;
+        _placeholderLabel.textColor = [UIColor lightGrayColor];
+        
         if (self.placeholderTextAttributes == nil) {
-            _summaryLabel.text = self.placeholder;
+            _placeholderLabel.text = self.placeholder;
         } else {
-            _summaryLabel.attributedText =
+            _placeholderLabel.attributedText =
                 [[NSAttributedString alloc] initWithString:self.placeholder
                                                 attributes:self.placeholderTextAttributes];
         }
     }
-}
-
-
-- (NSAttributedString *)reversedAttributedSummaryTextFromString:(NSString *)summary
-{
-    NSAttributedString *attributedSummary = [[NSAttributedString alloc] initWithString:summary
-                                                                            attributes:self.summaryTextAttributes];
-    
-    CGRect summaryLabelFrame = [self summaryLabelFrame];
-    CGFloat summaryLabelWidth = summaryLabelFrame.size.width;
-    CGFloat summaryLabelHeight = summaryLabelFrame.size.height;
-    
-    CGSize availableSpace = CGSizeMake(CGFLOAT_MAX, summaryLabelHeight);
-    
-    CGFloat textWidth = [attributedSummary boundingRectWithSize:availableSpace
-                                                        options:NSStringDrawingUsesLineFragmentOrigin
-                                                        context:nil].size.width;
-    if (textWidth <= summaryLabelWidth)
-    {
-        return attributedSummary;
-    }
-    
-    NSString *dots = @"...";
-    NSAttributedString *attributedDots = [[NSAttributedString alloc] initWithString:dots
-                                                                         attributes:[self summaryTextAttributes]];
-    CGFloat dotsWidth = [attributedDots boundingRectWithSize:availableSpace
-                                                     options:NSStringDrawingUsesLineFragmentOrigin
-                                                     context:nil].size.width;
-    
-    NSRange fullRange = NSMakeRange(0, attributedSummary.length);
-    
-    for (NSUInteger i = fullRange.location; i <= fullRange.length; i++)
-    {
-        NSRange currentRange;
-        currentRange.location = i;
-        currentRange.length = fullRange.length - i;
-        
-        NSAttributedString *partialText = [attributedSummary attributedSubstringFromRange:currentRange];
-        CGFloat partialTextWidth =
-        [partialText boundingRectWithSize:availableSpace
-                                  options:NSStringDrawingUsesLineFragmentOrigin
-                                  context:nil].size.width;
-        
-        if (partialTextWidth + dotsWidth <= summaryLabelWidth)
-        {
-            summary = [NSString stringWithFormat:@"%@%@", dots, [partialText string]];
-            
-            return [[NSAttributedString alloc] initWithString:summary attributes:[self summaryTextAttributes]];
-        }
-    }
-    
-    return attributedSummary;
-}
-
-
-- (NSString *)reversedSummaryTextFromString:(NSString *)summary
-{
-    CGRect summaryLabelFrame = [self summaryLabelFrame];
-    CGFloat summaryLabelWidth = summaryLabelFrame.size.width;
-    CGFloat summaryLabelHeight = summaryLabelFrame.size.height;
-    
-    CGSize availableSpace = CGSizeMake(CGFLOAT_MAX, summaryLabelHeight);
-    
-    NSDictionary *attributes = @{NSFontAttributeName : _summaryLabel.font};
-    
-    CGFloat textWidth = [summary boundingRectWithSize:availableSpace
-                                              options:NSStringDrawingUsesLineFragmentOrigin
-                                           attributes:attributes
-                                              context:nil].size.width;
-    
-    if (textWidth <= summaryLabelWidth)
-    {
-        return summary;
-    }
-    
-    NSString *dots = @"...";
-    CGFloat dotsWidth = [dots boundingRectWithSize:availableSpace
-                                           options:NSStringDrawingUsesLineFragmentOrigin
-                                        attributes:attributes
-                                           context:nil].size.width;
-    
-    NSRange fullRange = NSMakeRange(0, summary.length);
-    
-    for (NSUInteger i = fullRange.location; i <= fullRange.length; i++)
-    {
-        NSRange currentRange;
-        currentRange.location = i;
-        currentRange.length = fullRange.length - i;
-        
-        NSString *partialText = [summary substringWithRange:currentRange];
-        CGFloat partialTextWidth =
-            [partialText boundingRectWithSize:availableSpace
-                                      options:NSStringDrawingUsesLineFragmentOrigin
-                                   attributes:attributes
-                                      context:nil].size.width;
-        
-        if (partialTextWidth + dotsWidth <= summaryLabelWidth)
-        {
-            return [NSString stringWithFormat:@"%@%@", dots, partialText];
-        }
-    }
-    
-    return summary;
 }
 
 
@@ -491,7 +566,6 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
     _showsAddButton = YES;
 	_showsShadows = YES;
     _animatedRecipientsInAndOut = YES;
-    _showsSummaryInReversedOrder = NO;
     _recipientBackgroundImages = [NSMutableDictionary new];
     _recipientTitleTextAttributes = [NSMutableDictionary new];
     
@@ -542,16 +616,14 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 	_textField.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
 	[self addSubview:_textField];
 	[_textField addObserver:self forKeyPath:@"selectedTextRange" options:0 context:TURecipientsSelectionContext];
-	
-	_summaryLabel = [[UILabel alloc] init];
-    _summaryLabel.backgroundColor = [UIColor clearColor];
-	_summaryLabel.font = [UIFont systemFontOfSize:15.0];
-	[self addSubview:_summaryLabel];
-	
-    if (self.showsSummaryInReversedOrder)
-    {
-        _summaryLabel.lineBreakMode = NSLineBreakByCharWrapping;
-    }
+
+    _summaryContainerView = [[UIView alloc] init];
+    _summaryContainerView.clipsToBounds = YES;
+    [self addSubview:_summaryContainerView];
+    
+	_placeholderLabel = [[UILabel alloc] init];
+	_placeholderLabel.font = [UIFont systemFontOfSize:15.0];
+	[self addSubview:_placeholderLabel];
 	
 	[self addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(select:)]];
     
@@ -636,7 +708,9 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
                                     21.0 - toSize.height / 2,
                                     toSize.width, toSize.height);
         
-        _summaryLabel.frame = [self summaryLabelFrame];
+        CGRect containerViewFrame = [self _summaryContainerViewFrame];
+        _placeholderLabel.frame = containerViewFrame;
+        _summaryContainerView.frame = containerViewFrame;
         
         CGRect addButtonFrame;
         addButtonFrame.size = _addButton.intrinsicContentSize;
@@ -734,15 +808,39 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 	[self _frameChanged];
 }
 
-- (CGRect)summaryLabelFrame
+
+- (CGRect)_summaryContainerViewFrame
 {
-    CGRect summaryLabelFrame;
-    summaryLabelFrame.origin.x = CGRectGetMaxX(_toLabel.frame);
-    summaryLabelFrame.size.height = ceil(_summaryLabel.font.lineHeight);
-    summaryLabelFrame.origin.y = 21.0 - summaryLabelFrame.size.height / 2;
-    summaryLabelFrame.size.width = self.bounds.size.width - summaryLabelFrame.origin.x - 12.0;
+    CGRect frame;
+    frame.origin.x = CGRectGetMaxX(_toLabel.frame);
+    frame.size.height = ceil([UIFont systemFontOfSize:15.0].lineHeight);
+    frame.origin.y = 21.0 - frame.size.height / 2;
+    frame.size.width = self.bounds.size.width - frame.origin.x - 12.0;
     
-    return summaryLabelFrame;
+    return frame;
+}
+
+
+- (void)_layoutSummaryRecipientsRightAligned
+{
+    CGFloat leftPadding = 1.0;
+    
+    UILabel *lastRecipientLabel = nil;
+    
+    for (NSInteger index = [_summaryContainerView.subviews count] - 1; index >= 0; index--)
+    {
+        UILabel *currentRecipientLabel = _summaryContainerView.subviews[index];
+        
+        CGRect rect = currentRecipientLabel.frame;
+        CGFloat currentRecipientWidth = rect.size.width;
+        rect.origin.x = (lastRecipientLabel ? lastRecipientLabel.frame.origin.x
+                                            : _summaryContainerView.bounds.size.width) -
+                                              leftPadding -
+                                              currentRecipientWidth;
+        currentRecipientLabel.frame = rect;
+        
+        lastRecipientLabel = currentRecipientLabel;
+    }
 }
 
 
@@ -934,7 +1032,8 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
         _textField.alpha = 1.0;
         _addButton.alpha = 1.0;
         
-        _summaryLabel.alpha = 0.0;
+        _placeholderLabel.alpha = 0.0;
+        _summaryContainerView.alpha = 0.0;
         
         
         [self setNeedsLayout];
@@ -968,7 +1067,8 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 				_textField.alpha = 0.0;
 				_addButton.alpha = 0.0;
 				
-				_summaryLabel.alpha = 1.0;
+                _placeholderLabel.alpha = 1.0;
+                _summaryContainerView.alpha = 1.0;
 				
 				[self setNeedsLayout];
 				[self.superview layoutIfNeeded];

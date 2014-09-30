@@ -100,16 +100,6 @@
  */
 @property (nonatomic) BOOL animatedRecipientsInAndOut;
 
-/** Whether the recipients shown in the summary should be displayed in reversed order in such a way that the last
- selected recipient will stay always visible and the previous will be trimmed by an ellipsis glyph at the beginning
- of the line.
- 
- Example: ...hilip, Steve, Jony, Craig
- 
- The default value is NO.
- */
-@property (nonatomic) BOOL showsSummaryInReversedOrder;
-
 /** The height constraint for the entire bar.
  
  You can use this to set the height constraint in Interface Builder. This was almost necessary in iOS 6, however in iOS 7, you can set a placeholder constraint and let the bar create it's own height constraint.
