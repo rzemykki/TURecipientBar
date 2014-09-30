@@ -517,6 +517,8 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 {
     if (_recipients.count > 0) {
         _placeholderLabel.hidden = YES;
+        
+        // TODO: should recreate all the summary
     } else {
         _placeholderLabel.hidden = NO;
         _placeholderLabel.textColor = [UIColor lightGrayColor];
