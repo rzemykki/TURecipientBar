@@ -558,6 +558,7 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 
 - (void)dealloc
 {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 	[_textField removeObserver:self forKeyPath:@"selectedTextRange" context:TURecipientsSelectionContext];
 }
 
@@ -616,6 +617,11 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 	_textField.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
 	[self addSubview:_textField];
 	[_textField addObserver:self forKeyPath:@"selectedTextRange" options:0 context:TURecipientsSelectionContext];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(textFieldDidChange:)
+                                                 name:UITextFieldTextDidChangeNotification
+                                               object:_textField];
 
     _summaryContainerView = [[UIView alloc] init];
     _summaryContainerView.clipsToBounds = YES;
@@ -973,24 +979,12 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 		}
 	}
 	
-	
 	BOOL delegateResponse = YES;
 	if ([self.recipientsBarDelegate respondsToSelector:@selector(recipientsBar:shouldChangeTextInRange:replacementText:)]) {
 		delegateResponse = [self.recipientsBarDelegate recipientsBar:self shouldChangeTextInRange:range replacementText:string];
 	}
-	
-	
-	if (delegateResponse) {
-		[self _manuallyChangeTextField:textField inRange:range replacementString:string];
-		
-		
-		if ([self.recipientsBarDelegate respondsToSelector:@selector(recipientsBar:textDidChange:)]) {
-			[self.recipientsBarDelegate recipientsBar:self textDidChange:self.text];
-		}
-	}
-	
-	
-	return NO;
+
+    return delegateResponse;
 }
 
 - (void)_manuallyChangeTextField:(UITextField *)textField inRange:(NSRange)range replacementString:(NSString *)string
@@ -1045,6 +1039,14 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
             [self.recipientsBarDelegate recipientsBarTextDidBeginEditing:self];
         }
     }];
+}
+
+- (void)textFieldDidChange:(NSNotification *)notification
+{
+    if ([notification.object isEqual:self.textField] &&
+        [self.recipientsBarDelegate respondsToSelector:@selector(recipientsBar:textDidChange:)]) {
+        [self.recipientsBarDelegate recipientsBar:self textDidChange:self.text];
+    }
 }
 
 - (BOOL)textFieldShouldEndEditing:(UITextField *)textField
