@@ -987,17 +987,6 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
     return delegateResponse;
 }
 
-- (void)_manuallyChangeTextField:(UITextField *)textField inRange:(NSRange)range replacementString:(NSString *)string
-{
-	//we save the offset from the end of the document and reset the selection to be a caret there
-	NSInteger offset = [_textField offsetFromPosition:_textField.selectedTextRange.end toPosition:_textField.endOfDocument];
-	
-	textField.text = [textField.text stringByReplacingCharactersInRange:range withString:string];
-	
-	UITextPosition *newEnd = [_textField positionFromPosition:_textField.endOfDocument inDirection:UITextLayoutDirectionLeft offset:offset];
-	_textField.selectedTextRange = [_textField textRangeFromPosition:newEnd toPosition:newEnd];
-}
-
 - (BOOL)textFieldShouldReturn:(UITextField *)textField
 {
 	if ([self.recipientsBarDelegate respondsToSelector:@selector(recipientsBarReturnButtonClicked:)]) {
