@@ -947,7 +947,7 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 
 #pragma mark - UITextFieldDelegate
 
-- (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string;
+- (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string
 {
 	//we use a zero width space to detect the backspace
 	if ([[_textField.text substringWithRange:range] isEqual:TURecipientsPlaceholder]) {
