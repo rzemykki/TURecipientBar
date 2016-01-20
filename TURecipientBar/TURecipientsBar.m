@@ -558,6 +558,7 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 
 - (void)dealloc
 {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 	[_textField removeObserver:self forKeyPath:@"selectedTextRange" context:TURecipientsSelectionContext];
 }
 
@@ -616,6 +617,11 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 	_textField.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
 	[self addSubview:_textField];
 	[_textField addObserver:self forKeyPath:@"selectedTextRange" options:0 context:TURecipientsSelectionContext];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(textFieldDidChange:)
+                                                 name:UITextFieldTextDidChangeNotification
+                                               object:_textField];
 
     _summaryContainerView = [[UIView alloc] init];
     _summaryContainerView.clipsToBounds = YES;
@@ -941,7 +947,7 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 
 #pragma mark - UITextFieldDelegate
 
-- (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string;
+- (BOOL)textField:(UITextField *)textField shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string
 {
 	//we use a zero width space to detect the backspace
 	if ([[_textField.text substringWithRange:range] isEqual:TURecipientsPlaceholder]) {
@@ -973,35 +979,12 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
 		}
 	}
 	
-	
 	BOOL delegateResponse = YES;
 	if ([self.recipientsBarDelegate respondsToSelector:@selector(recipientsBar:shouldChangeTextInRange:replacementText:)]) {
 		delegateResponse = [self.recipientsBarDelegate recipientsBar:self shouldChangeTextInRange:range replacementText:string];
 	}
-	
-	
-	if (delegateResponse) {
-		[self _manuallyChangeTextField:textField inRange:range replacementString:string];
-		
-		
-		if ([self.recipientsBarDelegate respondsToSelector:@selector(recipientsBar:textDidChange:)]) {
-			[self.recipientsBarDelegate recipientsBar:self textDidChange:self.text];
-		}
-	}
-	
-	
-	return NO;
-}
 
-- (void)_manuallyChangeTextField:(UITextField *)textField inRange:(NSRange)range replacementString:(NSString *)string
-{
-	//we save the offset from the end of the document and reset the selection to be a caret there
-	NSInteger offset = [_textField offsetFromPosition:_textField.selectedTextRange.end toPosition:_textField.endOfDocument];
-	
-	textField.text = [textField.text stringByReplacingCharactersInRange:range withString:string];
-	
-	UITextPosition *newEnd = [_textField positionFromPosition:_textField.endOfDocument inDirection:UITextLayoutDirectionLeft offset:offset];
-	_textField.selectedTextRange = [_textField textRangeFromPosition:newEnd toPosition:newEnd];
+    return delegateResponse;
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField
@@ -1045,6 +1028,14 @@ void *TURecipientsSelectionContext = &TURecipientsSelectionContext;
             [self.recipientsBarDelegate recipientsBarTextDidBeginEditing:self];
         }
     }];
+}
+
+- (void)textFieldDidChange:(NSNotification *)notification
+{
+    if ([notification.object isEqual:self.textField] &&
+        [self.recipientsBarDelegate respondsToSelector:@selector(recipientsBar:textDidChange:)]) {
+        [self.recipientsBarDelegate recipientsBar:self textDidChange:self.text];
+    }
 }
 
 - (BOOL)textFieldShouldEndEditing:(UITextField *)textField
